@@ -1,0 +1,150 @@
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg xmlns="http://www.w3.org/2000/svg">
+  <g id="container"></g>
+
+  <script type="text/javascript">
+    <![CDATA[
+    const VIEWBOX_WIDTH = 1000;
+    const VIEWBOX_HEIGHT = 1000;
+
+    const RAY_COUNT = 20;
+    const RADIUS = Math.min(VIEWBOX_WIDTH, VIEWBOX_HEIGHT) / 2;
+
+    const svg = document.getElementsByTagName("svg")[0];
+    svg.setAttribute("viewBox", `0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`);
+    svg
+      .getElementById("container")
+      .setAttribute("transform", `translate(${VIEWBOX_WIDTH / 2}, ${VIEWBOX_HEIGHT / 2})`);
+
+
+      function Vec(x, y) {
+        return { x, y };
+      }
+
+      function Rect(a, oa, ds, de) {
+        this.id = `rect-${Math.floor(Math.random() * 0xFFFFFF).toString(16)}`;
+        this.direction = Math.random() < 0.5 ? 1 : -1;
+        this.speed = Math.random() * 0.25;
+
+        this.start = ds;
+        this.end = de;
+
+        this.toPath = () => `
+          M ${this.p1.x} ${this.p1.y}
+          L ${this.p2.x} ${this.p2.y}
+          L ${this.p3.x} ${this.p3.y}
+          L ${this.p4.x} ${this.p4.y}
+          L ${this.p1.x} ${this.p1.y}`;
+
+        this.update = () => {
+          this.start += this.speed * this.direction;
+          this.end += this.speed * this.direction;
+
+          this.p1 = polarToCartesian(this.start, oa);
+          this.p2 = polarToCartesian(this.end, oa);
+          this.p3 = polarToCartesian(this.end, a);
+          this.p4 = polarToCartesian(this.start, a);
+
+          if (this.start < (RADIUS * 0.05) || this.end > (RADIUS * 0.98)) {
+            this.direction *= -1;
+          }
+        }
+
+        this.update();
+      }
+
+      function pointsToPath(arr) {
+        return arr.map((p, idx) => {
+          if (idx === 0) {
+            return `M ${p.x} ${p.y}`;
+          } else {
+            return `L ${p.x} ${p.y}`;
+          }
+        }).join(" ");
+      }
+
+      function polarToCartesian(l, angle) {
+        return Vec(l * Math.cos(angle), l * Math.sin(angle));
+      }
+
+      const randomRect = (angle, x, y, dir) => {
+        const la = angle + (dir * ((Math.random() / 15) + 0.05));
+        const ds = (0.05 + (Math.random() * 0.15)) * RADIUS;
+        const de = ds + (0.25 + (Math.random() * 0.5)) * RADIUS;
+
+        return new Rect(angle, la, ds, de);
+      }
+
+      const blk = "#000";
+      const gold = "#f4c34e";
+
+      const rays = Array(RAY_COUNT).fill(0)
+        .map((c, idx) => {
+          const angle = idx * ((2 * Math.PI)/RAY_COUNT);
+
+          const x = Math.cos(angle) * RADIUS;
+          const y = Math.sin(angle) * RADIUS;
+
+          return {
+            ray: pointsToPath([
+              Vec(0, 0),
+              Vec(x, y)
+            ]),
+            left: randomRect(angle, x, y, -1),
+            right: randomRect(angle, x, y, 1),
+          };
+      });
+
+      rays.forEach(({ray, left, right}) => {
+        const container = svg.getElementById("container");
+
+        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        path.setAttribute("d", ray);
+        path.style.stroke = "rgba(0, 0, 0, 0.2)";
+        path.style.strokeWidth = "1";
+        container.appendChild(path);
+
+        const rect1 = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        rect1.setAttribute("id", left.id);
+        rect1.setAttribute("d", left.toPath());
+        rect1.style.stroke = blk;
+        rect1.style.strokeWidth = "1";
+        rect1.style.fill = gold;
+        container.appendChild(rect1);
+
+        const rect2 = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        rect2.setAttribute("id", right.id);
+        rect2.setAttribute("d", right.toPath());
+        rect2.style.stroke = blk;
+        rect2.style.strokeWidth = "1";
+        rect2.style.fill = gold;
+        container.appendChild(rect2);
+      });
+
+      let rotation = 0;
+      function animateRays() {
+        rotation += 0.01;
+        rotation %= 360;
+
+        svg
+          .getElementById("container")
+          .setAttribute("transform", `translate(${RADIUS}, ${RADIUS}) rotate(${rotation})`);
+
+        rays.forEach(({ray, left, right}) => {
+          left.update();
+
+          const leftEl = svg.getElementById(left.id);
+          leftEl.setAttribute("d", left.toPath());
+
+          right.update();
+          const rightEl = svg.getElementById(right.id);
+          rightEl.setAttribute("d", right.toPath());
+        });
+
+        window.requestAnimationFrame(animateRays);
+      }
+
+      window.requestAnimationFrame(animateRays);
+    ]]>
+  </script>
+</svg>

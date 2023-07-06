@@ -1,0 +1,233 @@
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg xmlns="http://www.w3.org/2000/svg">
+  <rect width="100%" height="100%" fill="#fefefe" />
+
+  <g id="container">
+    <path id="initial" fill="none" stroke="rgba(232, 22, 236, 0)" stroke-width="2px" />
+    <path id="path" fill="none" stroke="#143f8f" stroke-width="2px" />
+  </g>
+
+  <script type="text/javascript">
+    <![CDATA[
+    const VIEWBOX_WIDTH = 500;
+    const VIEWBOX_HEIGHT = 500;
+    const GRID_WIDTH = 90;
+    const GRID_HEIGHT = 90;
+    const GRID_SPACING = 5;
+    const BACKBITES = -1;
+    const ANIMATION_DELAY = 10;
+
+    const svg = document.getElementsByTagName("svg")[0];
+    svg.setAttribute("viewBox", `0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`);
+    svg
+      .getElementById("container")
+      .setAttribute("transform", `translate(${(VIEWBOX_WIDTH / 2) - (GRID_WIDTH * GRID_SPACING / 2)}, ${(VIEWBOX_HEIGHT / 2) - (GRID_HEIGHT * GRID_SPACING / 2)})`);
+
+    // Utility functions
+    function Vec(x, y) {
+      return { x, y };
+    }
+
+    function pointsToPath(points) {
+      return points.map((p, idx) => {
+        if (idx === 0) {
+          return `M ${p.x} ${p.y}`;
+        } else {
+          return `L ${p.x} ${p.y}`;
+        }
+      }).join(" ");
+    }
+
+    function gridToPath(grid) {
+      const points = [];
+      let current = grid;
+      while (current) {
+        points.push(Vec(current.x, current.y));
+        current = current.next;
+      }
+
+      return pointsToPath(points);
+    }
+
+    function createGrid(width, height, spacing) {
+      let head = null;
+      let prev = null;
+
+      let count = 0;
+      let dir = 1;
+      let y = 0;
+      let x = 0;
+
+      while (count < width * height) {
+        count++;
+
+        const node = { x, y, prev, next: null };
+
+        if (prev) {
+          prev.next = node;
+        }
+
+        prev = node;
+
+        if (!head) {
+          head = prev;
+        }
+
+        x += spacing * dir;
+        if (x >= width * spacing || x < 0) {
+          dir = -dir;
+          x += spacing * dir;
+          y += spacing;
+        }
+      }
+
+      return head;
+    }
+
+    function findRandomEndpoint(grid) {
+      if (Math.random() < 0.5) {
+        return grid;
+      }
+
+      let current = grid;
+      while (current.next) {
+        current = current.next;
+      }
+
+      return current;
+    }
+
+    const previousNeighbors = new Map();
+    function findRandomNeighbor(grid, node) {
+      let potentials = [
+        [node.x - GRID_SPACING, node.y],
+        [node.x + GRID_SPACING, node.y],
+        [node.x, node.y - GRID_SPACING],
+        [node.x, node.y + GRID_SPACING],
+      ];
+
+      let neighbors = [];
+      let current = grid;
+      let count = 0;
+      while (count < GRID_WIDTH * GRID_HEIGHT && current.next) {
+        if (potentials.some(p => p[0] === current.x && p[1] === current.y)) {
+          neighbors.push(current);
+        }
+
+        current = current.next;
+        count++;
+      }
+
+      neighbors = neighbors.filter(n => n !== node.next);
+      const check = neighbors.filter(n => {
+        const key = `${n.x},${n.y}`;
+        const prev = previousNeighbors.get(key);
+        return !prev;
+      });
+
+      if (check.length > 0) {
+        neighbors = check;
+      }
+
+      const neighbor = neighbors[Math.floor(Math.random() * neighbors.length)];
+      previousNeighbors.set(`${neighbor.x},${neighbor.y}`, true);
+
+      return neighbor;
+    }
+
+    function checkLoop(node) {
+      const checks = { prev: false, next: false };
+
+      for (let dir of ["prev", "next"]) {
+        let current = node[dir];
+
+        while (current && current[dir] && current !== node) {
+          current = current[dir];
+        }
+
+        checks[dir] = current === node;
+      }
+
+      return checks;
+    }
+
+    function backbite(grid) {
+      let head = grid;
+      const endpoint = findRandomEndpoint(grid);
+      const neighbor = findRandomNeighbor(grid, endpoint);
+
+      if (!neighbor) {
+        console.error("Could not find neighbor");
+        return;
+      }
+
+      if (!endpoint.next) {
+        endpoint.next = neighbor;
+      } else if (!endpoint.prev) {
+        endpoint.prev = neighbor;
+      }
+
+      const loops = checkLoop(neighbor);
+
+      // Fix loop in reverse graph traversal
+      if (loops.prev) {
+        let current = neighbor.prev;
+        current.next = null;
+        head = current;
+        while (current !== neighbor) {
+          const tmp = current.prev;
+          current.prev = current.next;
+          current.next = tmp;
+          current = tmp;
+        }
+
+        neighbor.prev = endpoint;
+      }
+
+      // Fix loop in forwards graph traversal
+      if (loops.next) {
+        let current = neighbor.next;
+        current.prev = null;
+        while (current !== neighbor) {
+          const tmp = current.next;
+          current.next = current.prev;
+          current.prev = tmp;
+          current = tmp;
+        }
+
+        neighbor.next = endpoint;
+      }
+
+      return head;
+    }
+
+    // Fill screen with path covering all grid squares
+    let head = createGrid(GRID_WIDTH, GRID_HEIGHT, GRID_SPACING);
+    const bg = gridToPath(head);
+
+    svg.getElementById("initial")
+      .setAttribute("d", bg);
+    svg.getElementById("path")
+      .setAttribute("d", bg);
+
+    let count = 0;
+    async function runBackbite() {
+      if (BACKBITES === -1 || count < BACKBITES) {
+        await new Promise(resolve => setTimeout(resolve, ANIMATION_DELAY));
+
+        count++;
+        head = backbite(head);
+
+        svg.getElementById("path")
+          .setAttribute("d", gridToPath(head));
+
+        runBackbite();
+      } else {
+        console.log("done");
+      }
+    }
+
+    runBackbite();
+    ]]>
+  </script>
+</svg>
